@@ -56,7 +56,7 @@ summary { cursor: pointer; font-size: 13px; color: #a8adb7; }
 </head>
 <body>
 <h1>ツール要約 — 表示試作</h1>
-<p class="notice">使い捨てのブラウザ上の見本です。pi本体の表示・幅計算を再現したものではありません。<br>差分数・失敗理由・画像は仮データ。editは保存済み差分から集計可能ですが、writeには旧内容が残らないため、数値を省く案を仮置きしています（未合意）。回答・入力欄などは配置の参考用で、変更案ではありません。</p>
+<p class="notice">使い捨てのブラウザ上の見本です。pi本体の表示・幅計算を再現したものではありません。<br>A案を採用。editだけ差分数を表示し、writeは対象のみと合意しました。差分数・失敗理由・画像は仮データ。回答・入力欄などは配置の参考用で、変更案ではありません。</p>
 <div class="controls">
 <label>幅 <select id="width"><option value="40">40桁相当</option><option value="64">64桁相当</option><option value="100" selected>100桁相当</option></select></label>
 <label>場面 <select id="scenario"><option value="normal">通常・失敗・画像</option><option value="long">長い対象と理由</option><option value="sequence">連続実行</option><option value="parallel">同時実行（表示モデル）</option></select></label>
@@ -72,7 +72,7 @@ summary { cursor: pointer; font-size: 13px; color: #a8adb7; }
 <div class="input">› 次のメッセージを入力…</div>
 <div class="footer">~/Work/example · main</div>
 </section>
-<p>比較したい点：対象の見つけやすさ／数値の位置／40桁での省略／連続実行の密度。<br>共通の仮案：呼び出しごとに1行、空行・集約なし。長い対象は末尾を「…」で省略し、差分数を残します。失敗理由は別の1行、画像は例外として残します。</p>
+<p>採用方針：A案。長いパスは途中を「…」で省略、コマンドは末尾省略。差分数はeditのみ。失敗理由は別の1行、画像は例外として残します。<br>残る仮案：呼び出しごとに1行、空行・集約なし。幅が足りない場合も状態・ツール名・差分数を優先します。B/Cは比較記録として残しています。</p>
 <details open><summary>試作の状態（表示案の一部ではありません）</summary><pre id="state"></pre></details>
 <nav class="switcher" aria-label="表示案の切り替え"><button id="prev" aria-label="前の案">←</button><span id="variantName"></span><button id="next" aria-label="次の案">→</button></nav>
 <script>
@@ -124,9 +124,21 @@ function span(className, text) {
   element.textContent = text;
   return element;
 }
+// ASCII fixtures only: approximate browser widths, not terminal-cell measurement.
+function shortenPath(path, budget) {
+  if (path.length <= budget) return path;
+  if (budget < 5) return '…';
+  const basename = path.slice(path.lastIndexOf('/') + 1);
+  if (basename.length + 2 <= budget) {
+    const prefix = path.slice(0, Math.max(0, budget - basename.length - 2));
+    return prefix + '…/' + basename;
+  }
+  return path.slice(0, 3) + '…' + path.slice(-(budget - 4));
+}
 function render() {
   const scenario = byId('scenario').value;
   const rows = fixtures[scenario];
+  document.querySelector('.terminal').style.setProperty('--cols', byId('width').value);
   const calls = byId('calls');
   calls.replaceChildren();
   calls.className = 'variant-' + variant;
@@ -164,8 +176,13 @@ function render() {
     }
     calls.append(call);
     states.push({ ...row, status });
+    if (['read', 'write', 'edit', 'ls'].includes(row.tool)) {
+      const measure = document.createElement('canvas').getContext('2d');
+      measure.font = getComputedStyle(target).font;
+      const budget = Math.floor(target.clientWidth / measure.measureText('0').width);
+      target.textContent = shortenPath(row.target, budget);
+    }
   });
-  document.querySelector('.terminal').style.setProperty('--cols', byId('width').value);
   byId('variantName').textContent = names[variant];
   byId('description').textContent = descriptions[variant];
   byId('after').textContent = complete ? '確認が終わりました。（回答の配置見本）' : '';
@@ -191,6 +208,7 @@ document.addEventListener('keydown', event => {
     switchVariant(event.key === 'ArrowLeft' ? -1 : 1);
   }
 });
+window.addEventListener('resize', render);
 render();
 </script>
 </body>
