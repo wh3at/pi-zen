@@ -53,22 +53,42 @@ function summaryRows(screen: string): string[] {
   return screen.split("\n").filter((line) => /[.…✓✗] bash /.test(line));
 }
 
+async function summaryRow(terminal: TuiTest, status: "…" | "✓"): Promise<{ row: number; text: string }> {
+  const location = await terminal.getByText(`${status} bash sleep 2; echo`).location();
+  const rows = summaryRows(await terminal.text({ full: true }));
+  const text = rows.find((line) => line.includes(`${status} bash sleep 2; echo`));
+  expect(text).toBeDefined();
+  return { row: location.start.row, text: text!.trimEnd() };
+}
+
+function expectSingleLineSummary(text: string, width: number, status: "…" | "✓"): void {
+  expect(text).toMatch(new RegExp(`^${status} bash sleep 2; echo`));
+  expect(text).not.toContain("\n");
+  expect(Array.from(text).length).toBeLessThanOrEqual(width);
+}
+
 describe("実PTYでpi-zenを読み込んだpiセッション", () => {
   for (const width of [40, 64, 100]) {
     it(`${width}桁で実行中から完了へ同じツール要約を更新し、ツール詳細を表示しない`, async () => {
       const terminal = await runPi(width);
 
       await terminal.getByText("… bash sleep 2; echo").expect({ timeout: 8_000 });
+      const runningSummary = await summaryRow(terminal, "…");
       const running = await terminal.text({ full: true });
       expect(summaryRows(running)).toHaveLength(1);
+      expectSingleLineSummary(runningSummary.text, width, "…");
       expect(running).not.toContain("HIDDEN_TOOL_BODY");
+      if (width === 40) expect(running).not.toContain("| base64 -d");
 
       const completedSummary = terminal.getByText("✓ bash sleep 2; echo");
       await completedSummary.expect({ timeout: 8_000 });
+      const completedRow = await summaryRow(terminal, "✓");
+      expect(completedRow.row).toBe(runningSummary.row);
+      expectSingleLineSummary(completedRow.text, width, "✓");
+      if (width === 40) expect(await terminal.text({ full: true })).not.toContain("| base64 -d");
       const location = await completedSummary.location();
-      expect(location.start.row).toBe(location.end.row);
       const summaryCells = await terminal.cells(
-        location.start.column, location.start.row, location.end.column - location.start.column + 1, 1,
+        0, location.start.row, width, 1,
       );
       expect(summaryCells.every((cell) => cell.bg === "default")).toBe(true);
       await terminal.getByText("FIXTURE_DONE").expect({ timeout: 8_000 });
@@ -85,11 +105,17 @@ describe("実PTYでpi-zenを読み込んだpiセッション", () => {
     await terminal.getByText("… bash sleep 2; echo").expect({ timeout: 8_000 });
     await terminal.resize(40, 20);
     await terminal.getByText("… bash sleep 2; echo").expect({ timeout: 8_000 });
+    const resizedRunning = await summaryRow(terminal, "…");
+    expectSingleLineSummary(resizedRunning.text, 40, "…");
     expect(summaryRows(await terminal.text({ full: true }))).toHaveLength(1);
 
     await terminal.getByText("✓ bash sleep 2; echo").expect({ timeout: 8_000 });
+    const completedAt40 = await summaryRow(terminal, "✓");
+    expectSingleLineSummary(completedAt40.text, 40, "✓");
     await terminal.resize(64, 20);
     await terminal.getByText("✓ bash sleep 2; echo").expect({ timeout: 8_000 });
+    const resizedCompleted = await summaryRow(terminal, "✓");
+    expectSingleLineSummary(resizedCompleted.text, 64, "✓");
     const completed = await terminal.text({ full: true });
     expect(summaryRows(completed)).toHaveLength(1);
     expect(completed).not.toContain("HIDDEN_TOOL_BODY");
