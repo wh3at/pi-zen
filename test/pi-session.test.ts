@@ -103,4 +103,40 @@ describe("pi-zenを読み込んだpiセッション", () => {
     expect(plain(multilineCall.render(40))).toEqual(["… bash printf first printf second"]);
     session.dispose();
   });
+
+  it("状態色は完了マークだけに適用し、本文と途中表示は標準色にする", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "pi-zen-"));
+    const { session, extensionsResult } = await loadedSession(cwd, ["bash", "edit"]);
+    try {
+      const extension = extensionsResult.extensions.find((item) => item.resolvedPath === extensionPath)!;
+      const applied: [string, string][] = [];
+      const theme = { fg: (color: string, text: string) => {
+        applied.push([color, text]);
+        return text;
+      } } as never;
+      for (const name of ["bash", "edit"]) {
+        const tool = extension.tools.get(name)!.definition;
+        const args = name === "bash" ? { command: "echo hello" } : { path: "source.txt" };
+        const context = {
+          args, state: {}, lastComponent: undefined, invalidate() {}, toolCallId: "call", cwd,
+          executionStarted: true, argsComplete: true, isPartial: true, expanded: false, showImages: false, isError: false,
+        };
+        applied.length = 0;
+        tool.renderCall!(args, theme, context).render(80);
+        expect(applied.filter(([color]) => color !== "text")).toEqual([]);
+        for (const isError of [false, true]) {
+          applied.length = 0;
+          tool.renderResult!(
+            { content: [{ type: "text", text: "failure reason" }], details: { diff: "-1 old\n+1 new" } },
+            { expanded: false, isPartial: false }, theme, { ...context, isPartial: false, isError },
+          ).render(80);
+          expect(applied.filter(([color]) => color !== "text")).toEqual([
+            [isError ? "error" : "success", isError ? "✗" : "✓"],
+          ]);
+        }
+      }
+    } finally {
+      session.dispose();
+    }
+  });
 });

@@ -18,18 +18,19 @@ class SummaryLine implements Component {
     private readonly name: string,
     private readonly target: string,
     private readonly suffix: string,
-    private readonly color: (text: string) => string,
+    private readonly statusColor: (text: string) => string,
+    private readonly textColor: (text: string) => string,
   ) {}
 
   render(width: number): string[] {
     if (width <= 0) return [""];
-    const prefix = `${this.status} ${this.name} `;
+    const prefix = `${this.statusColor(this.status)}${this.textColor(` ${this.name} `)}`;
     const suffix = this.suffix ? ` ${this.suffix}` : "";
     const available = Math.max(0, width - visibleWidth(prefix) - visibleWidth(suffix));
     const target = this.name === "bash"
       ? truncateToWidth(this.target, available, "…")
       : middleTruncate(this.target, available);
-    return [truncateToWidth(this.color(`${prefix}${target}${suffix}`), width, "")];
+    return [truncateToWidth(`${prefix}${this.textColor(`${target}${suffix}`)}`, width, "")];
   }
 
   invalidate(): void {}
@@ -92,7 +93,10 @@ function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition
     },
     renderCall(args, theme, context) {
       if (!context.isPartial) return new Container();
-      return new SummaryLine("…", base.name, targetFor(base.name, args as Args), "", (text) => theme.fg("warning", text));
+      return new SummaryLine(
+        "…", base.name, targetFor(base.name, args as Args), "",
+        (text) => theme.fg("text", text), (text) => theme.fg("text", text),
+      );
     },
     renderResult(result, options, theme, context) {
       if (options.isPartial) return new Container();
@@ -103,12 +107,13 @@ function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition
         targetFor(base.name, context.args as Args),
         suffix,
         (text) => theme.fg(context.isError ? "error" : "success", text),
+        (text) => theme.fg("text", text),
       );
       const reason = context.isError ? failureReason(base.name, result.content) : undefined;
       if (!reason) return summary;
       return {
         render(width) {
-          return [...summary.render(width), truncateToWidth(theme.fg("error", reason), width, "…")];
+          return [...summary.render(width), truncateToWidth(theme.fg("text", reason), width, "…")];
         },
         invalidate() {},
       };
