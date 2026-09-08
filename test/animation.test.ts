@@ -33,25 +33,25 @@ function context(): Parameters<NonNullable<ToolDefinition["renderCall"]>>[2] {
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
 
-it.each(names)("%sの3点だけが順番に明るくなり、再描画でも周期と幅を保つ", (name) => {
+it.each(names)("%sの明るい点が300msごとに0〜3個に増え、再描画でも周期と幅を保つ", (name) => {
   const { tools } = setup();
   const tool = tools.get(name)!;
   const ctx = context();
   const frames: string[] = [];
-  for (let frame = 0; frame < 4; frame++) {
+  for (let frame = 0; frame < 5; frame++) {
     const line = tool.renderCall!(ctx.args, theme, ctx);
     ctx.lastComponent = line;
     const rendered = line.render(40)[0]!;
     frames.push(rendered);
-    const marker = [0, 1, 2].map((index) => (theme as any).fg(index === frame % 3 ? "text" : "dim", ".")).join("");
+    const marker = [0, 1, 2].map((index) => (theme as any).fg(index < frame % 4 ? "text" : "dim", ".")).join("");
     expect(rendered.startsWith(marker)).toBe(true);
     expect(plain(rendered)).toBe(plain(frames[0]!));
     expect(visibleWidth(rendered)).toBeLessThanOrEqual(40);
     expect(vi.getTimerCount()).toBe(1);
-    vi.advanceTimersByTime(350);
+    vi.advanceTimersByTime(300);
   }
-  expect(frames[0]).toBe(frames[3]);
-  expect(ctx.invalidate).toHaveBeenCalledTimes(4);
+  expect(frames[0]).toBe(frames[4]);
+  expect(ctx.invalidate).toHaveBeenCalledTimes(5);
 });
 
 it.each([false, true])("完了・失敗・中断で点を止め、結果の再描画や復元ではタイマーを作らない: error=%s", (isError) => {

@@ -43,9 +43,9 @@ class RunningDots {
   constructor(invalidate: () => void, private readonly active: Set<RunningDots>) {
     active.add(this);
     this.timer = setInterval(() => {
-      this.frame = (this.frame + 1) % 3;
+      this.frame = (this.frame + 1) % 4;
       invalidate();
-    }, 350);
+    }, 300);
     this.timer.unref();
   }
 
@@ -122,7 +122,7 @@ function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition
       }
       return new SummaryLine(
         "...", base.name, targetFor(base.name, args as Args), "",
-        (text) => [...text].map((dot, index) => theme.fg(index === (dots?.frame ?? 0) ? "text" : "dim", dot)).join(""),
+        (text) => [...text].map((dot, index) => theme.fg(index < (dots?.frame ?? 0) ? "text" : "dim", dot)).join(""),
         (text) => theme.fg("text", text),
       );
     },

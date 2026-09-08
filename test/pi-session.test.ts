@@ -123,7 +123,7 @@ describe("pi-zenを読み込んだpiセッション", () => {
         };
         applied.length = 0;
         tool.renderCall!(args, theme, context).render(80);
-        expect(applied.filter(([color]) => color !== "text")).toEqual([["dim", "."], ["dim", "."]]);
+        expect(applied.filter(([color]) => color !== "text")).toEqual([["dim", "."], ["dim", "."], ["dim", "."]]);
         for (const isError of [false, true]) {
           applied.length = 0;
           tool.renderResult!(

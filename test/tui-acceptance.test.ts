@@ -81,7 +81,7 @@ describe("実PTYでpi-zenを読み込んだpiセッション", () => {
       if (width === 40) expect(running).not.toContain("| base64 -d");
       const dotColors = async () => (await terminal.cells(0, runningSummary.row, 3, 1)).map((cell) => cell.fg);
       const firstColors = await dotColors();
-      expect(new Set(firstColors).size).toBe(2);
+      expect([1, 2]).toContain(new Set(firstColors).size);
       await expect.poll(dotColors, { timeout: 1_000, interval: 50 }).not.toEqual(firstColors);
       expect((await summaryRow(terminal, "...")).text).toBe(runningSummary.text);
 
