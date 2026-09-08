@@ -1,26 +1,59 @@
 # pi-zen
 
-piの標準ツール表示を、作業の足跡を追える最小限の表示へ置き換えるpi extensionです。
+A pi extension that replaces built-in tool output with short summaries.
 
-- 対象: `write` / `edit` / `grep` / `find` / `ls`
-- 表示: `状態 → ツール名 → 対象 → ツール差分数（edit成功時のみ）`
-- 対象ツールは標準tool factoryへ実行を委譲し、モデル向け結果や保存内容は変更しません。
-- `bash` / `read` は上書きせず、実行・表示ともpi標準のまま残します。
+- Tools: `read` / `write` / `edit` / `bash` / `grep` / `find` / `ls`
+- Format: `status → tool → target → lines added/removed (successful edits only)`
+- Tool results reach the model and session storage without being rewritten as summaries.
+- **Summarizing bash and read affects execution settings. See [Limitations](#limitations).**
 
-piの公開拡張APIでは設定済みの実行処理を保持したまま表示だけを差し替えられません。`shellPath` / `shellCommandPrefix` / `images.autoResize`を失わないよう、`bash` / `read`は要約対象外です。コマンド出力・read本文・画像は標準の表示設定に従います。
-
-## インストール
+## Installation
 
 ```bash
 pi install git:github.com/wh3at/pi-zen
 ```
 
-最低対応piバージョンは0.85.1です。同名ツールを置き換える別extensionとの併用は保証対象外で、pi-zenより先に登録済みの同名ツールは上書きしません。
+Requires pi 0.85.1 or later.
 
-## 確認記録
+## Limitations
 
-2026-09-08、pi 0.85.1（npmの最新安定版と同一）で、作業ディレクトリ・設定・保存先を隔離したJSON CLI／実PTY試験を実施しました。全7ツールの成功・失敗の有効／無効比較、40/64/100桁の表示、実保存からの再開、並行実行、中断、画像プロトコルと表示設定を確認しています。外部LLMや認証には依存しません。
+### Settings that are not preserved
 
-`/reload`後に過去の行が標準表示へ戻ることは許容動作です。保存内容は変更せず、その後の対象5ツールの新しい呼出しにはツール要約を使います。設定保持の回帰テストを含む確認範囲・未確認項目は[受け入れ確認記録](docs/acceptance.md)を参照してください。
+Summaries are enabled for all seven tools by default. However, pi-zen recreates the tools without preserving these execution settings:
 
-pi 0.85.1では、内容があるツール表示の先頭にpi側が空行を1行追加します。Issue #6の空行禁止要件は撤回され、この空行は許容されます。対象5ツールの通常1行・失敗最大2行の制限は要約と失敗理由の本文に適用し、pi側の空行は数えません。対象5ツールの枠・背景色を付けない要件は維持します。
+| Tool | Setting not preserved | Effect |
+|---|---|---|
+| `bash` | `shellPath` / `shellCommandPrefix` | Commands run without the configured shell or prefix. |
+| `read` | `images.autoResize: false` | Images are resized automatically, potentially changing the resolution sent to the model. |
+
+If these settings are unset, behavior matches Pi's defaults for these options. Image resizing does not affect text reads or `terminal.showImages`.
+
+### Preserving your settings
+
+If you use these settings, set the corresponding tool to `false` in the user-wide `~/.pi/agent/pi-zen.json`. This disables its summary and retains Pi's configured execution and display.
+
+Create the default configuration below, then change the values you need:
+
+```bash
+(
+  set -C
+  config_dir="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
+  mkdir -p "$config_dir" &&
+  cat > "$config_dir/pi-zen.json" <<'JSON'
+{
+  "bash": true,
+  "read": true
+}
+JSON
+)
+```
+
+- `true` or omitted: enable the summary.
+- `false`: disable the summary, not the tool.
+- Restart pi or run `/reload` to apply changes.
+- If `PI_CODING_AGENT_DIR` is set, its `pi-zen.json` is used. There are no project-level settings.
+- Invalid JSON or value types cause an extension load error.
+
+### Past output after /reload
+
+Past tool calls may revert to Pi's standard display after `/reload`. Stored results remain unchanged; new calls use the current configuration.
