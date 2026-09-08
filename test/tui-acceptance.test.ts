@@ -50,10 +50,10 @@ async function runPi(cols: number) {
 }
 
 function summaryRows(screen: string): string[] {
-  return screen.split("\n").filter((line) => /[.…✓✗] bash /.test(line));
+  return screen.split("\n").filter((line) => /(?:\.{3}|[✓✗]) bash /.test(line));
 }
 
-async function summaryRow(terminal: TuiTest, status: "…" | "✓"): Promise<{ row: number; text: string }> {
+async function summaryRow(terminal: TuiTest, status: "..." | "✓"): Promise<{ row: number; text: string }> {
   const location = await terminal.getByText(`${status} bash sleep 2; echo`).location();
   const rows = summaryRows(await terminal.text({ full: true }));
   const text = rows.find((line) => line.includes(`${status} bash sleep 2; echo`));
@@ -61,8 +61,8 @@ async function summaryRow(terminal: TuiTest, status: "…" | "✓"): Promise<{ r
   return { row: location.start.row, text: text!.trimEnd() };
 }
 
-function expectSingleLineSummary(text: string, width: number, status: "…" | "✓"): void {
-  expect(text).toMatch(new RegExp(`^${status} bash sleep 2; echo`));
+function expectSingleLineSummary(text: string, width: number, status: "..." | "✓"): void {
+  expect(text.startsWith(`${status} bash sleep 2; echo`)).toBe(true);
   expect(text).not.toContain("\n");
   expect(Array.from(text).length).toBeLessThanOrEqual(width);
 }
@@ -72,13 +72,18 @@ describe("実PTYでpi-zenを読み込んだpiセッション", () => {
     it(`${width}桁で実行中から完了へ同じツール要約を更新し、ツール詳細を表示しない`, async () => {
       const terminal = await runPi(width);
 
-      await terminal.getByText("… bash sleep 2; echo").expect({ timeout: 8_000 });
-      const runningSummary = await summaryRow(terminal, "…");
+      await terminal.getByText("... bash sleep 2; echo").expect({ timeout: 8_000 });
+      const runningSummary = await summaryRow(terminal, "...");
       const running = await terminal.text({ full: true });
       expect(summaryRows(running)).toHaveLength(1);
-      expectSingleLineSummary(runningSummary.text, width, "…");
+      expectSingleLineSummary(runningSummary.text, width, "...");
       expect(running).not.toContain("HIDDEN_TOOL_BODY");
       if (width === 40) expect(running).not.toContain("| base64 -d");
+      const dotColors = async () => (await terminal.cells(0, runningSummary.row, 3, 1)).map((cell) => cell.fg);
+      const firstColors = await dotColors();
+      expect(new Set(firstColors).size).toBe(2);
+      await expect.poll(dotColors, { timeout: 1_000, interval: 50 }).not.toEqual(firstColors);
+      expect((await summaryRow(terminal, "...")).text).toBe(runningSummary.text);
 
       const completedSummary = terminal.getByText("✓ bash sleep 2; echo");
       await completedSummary.expect({ timeout: 8_000 });
@@ -95,18 +100,18 @@ describe("実PTYでpi-zenを読み込んだpiセッション", () => {
       const completed = await terminal.text({ full: true });
       expect(summaryRows(completed)).toHaveLength(1);
       expect(completed).not.toContain("HIDDEN_TOOL_BODY");
-      expect(completed).not.toContain("… bash");
+      expect(completed).not.toContain("... bash");
       expect((await terminal.getSize()).cols).toBe(width);
     }, 20_000);
   }
 
   it("実行中と完了後のresizeでも要約を折り返さず、詳細を再表示しない", async () => {
     const terminal = await runPi(100);
-    await terminal.getByText("… bash sleep 2; echo").expect({ timeout: 8_000 });
+    await terminal.getByText("... bash sleep 2; echo").expect({ timeout: 8_000 });
     await terminal.resize(40, 20);
-    await terminal.getByText("… bash sleep 2; echo").expect({ timeout: 8_000 });
-    const resizedRunning = await summaryRow(terminal, "…");
-    expectSingleLineSummary(resizedRunning.text, 40, "…");
+    await terminal.getByText("... bash sleep 2; echo").expect({ timeout: 8_000 });
+    const resizedRunning = await summaryRow(terminal, "...");
+    expectSingleLineSummary(resizedRunning.text, 40, "...");
     expect(summaryRows(await terminal.text({ full: true }))).toHaveLength(1);
 
     await terminal.getByText("✓ bash sleep 2; echo").expect({ timeout: 8_000 });

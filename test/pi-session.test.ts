@@ -100,11 +100,11 @@ describe("pi-zenを読み込んだpiセッション", () => {
     expect(plain(editResult.render(30))).toEqual(["✓ edit 日本語/…urce.txt +2 -1"]);
     expect(plain(bashError.render(24))).toEqual(["✗ bash printf a-very-lo…", "Command exited with cod…"]);
     expect(resumedCall.render(30)).toEqual([]);
-    expect(plain(multilineCall.render(40))).toEqual(["… bash printf first printf second"]);
+    expect(plain(multilineCall.render(40))).toEqual(["... bash printf first printf second"]);
     session.dispose();
   });
 
-  it("状態色は完了マークだけに適用し、本文と途中表示は標準色にする", async () => {
+  it("状態色は完了マークだけに適用し、実行中の点だけを明暗表示する", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "pi-zen-"));
     const { session, extensionsResult } = await loadedSession(cwd, ["bash", "edit"]);
     try {
@@ -123,7 +123,7 @@ describe("pi-zenを読み込んだpiセッション", () => {
         };
         applied.length = 0;
         tool.renderCall!(args, theme, context).render(80);
-        expect(applied.filter(([color]) => color !== "text")).toEqual([]);
+        expect(applied.filter(([color]) => color !== "text")).toEqual([["dim", "."], ["dim", "."]]);
         for (const isError of [false, true]) {
           applied.length = 0;
           tool.renderResult!(

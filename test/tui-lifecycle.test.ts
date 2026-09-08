@@ -37,7 +37,7 @@ async function launch(fixture: Awaited<ReturnType<typeof setup>>, width = 100, s
 }
 
 function toolRows(screen: string) {
-  return screen.split("\n").map((row) => row.trimEnd()).filter((row) => /^[…✓✗] (read|write|edit|bash|grep|find|ls) /.test(row));
+  return screen.split("\n").map((row) => row.trimEnd()).filter((row) => /^(?:\.{3}|[✓✗]) (read|write|edit|bash|grep|find|ls) /.test(row));
 }
 
 for (const width of [40, 64, 100]) {
@@ -61,7 +61,7 @@ for (const width of [40, 64, 100]) {
     expect(rows[6]).toBe("✓ ls search");
     const transcript = screen.slice(screen.indexOf("✓ read source.txt"), screen.indexOf("FIXTURE_DONE"));
     expect(transcript.split("\n").filter((row) => row.trim())).toHaveLength(21);
-    for (const marker of ["HIDDEN_WRITE_BODY", "HIDDEN_BASH_BODY", "HIDDEN_SEARCH_BODY", "HIDDEN_FILENAME", "HIDDEN_ERROR_LOG", "… bash"]) {
+    for (const marker of ["HIDDEN_WRITE_BODY", "HIDDEN_BASH_BODY", "HIDDEN_SEARCH_BODY", "HIDDEN_FILENAME", "HIDDEN_ERROR_LOG", "... bash"]) {
       expect(transcript).not.toContain(marker);
     }
     expect(transcript).toContain("Command exited with code 7");
@@ -146,7 +146,7 @@ it("同じbashの並行実行は完了順で並べ替えず、途中ログも表
   const terminal = await launch(fixture);
   await terminal.submit("run fixture");
   await terminal.getByText("✓ bash printf second").expect();
-  expect(toolRows(await terminal.text({ full: true }))).toEqual(["… bash sleep 3; printf first", "✓ bash printf second"]);
+  expect(toolRows(await terminal.text({ full: true }))).toEqual(["... bash sleep 3; printf first", "✓ bash printf second"]);
   await terminal.getByText("FIXTURE_DONE").expect();
   expect(toolRows(await terminal.text({ full: true }))).toEqual(["✓ bash sleep 3; printf first", "✓ bash printf second"]);
   const screen = await terminal.text({ full: true });
@@ -157,7 +157,7 @@ it("実行中のbashをEscapeで中断し、標準の理由だけを残して実
   const fixture = await setup([[{ name: "bash", arguments: { command: "sleep 30" } }]]);
   const terminal = await launch(fixture, 40);
   await terminal.submit("run fixture");
-  await terminal.getByText("… bash sleep 30").expect();
+  await terminal.getByText("... bash sleep 30").expect();
   await terminal.press("Escape");
   await terminal.getByText("✗ bash sleep 30").expect();
   await terminal.waitIdle();

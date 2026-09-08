@@ -36,6 +36,25 @@ class SummaryLine implements Component {
   invalidate(): void {}
 }
 
+class RunningDots {
+  frame = 0;
+  private readonly timer: ReturnType<typeof setInterval>;
+
+  constructor(invalidate: () => void, private readonly active: Set<RunningDots>) {
+    active.add(this);
+    this.timer = setInterval(() => {
+      this.frame = (this.frame + 1) % 3;
+      invalidate();
+    }, 350);
+    this.timer.unref();
+  }
+
+  stop(): void {
+    clearInterval(this.timer);
+    this.active.delete(this);
+  }
+}
+
 function middleTruncate(value: string, width: number): string {
   if (width <= 0) return "";
   if (visibleWidth(value) <= width) return value;
@@ -84,7 +103,7 @@ function failureReason(name: string, content: Array<{ type: string; text?: strin
   return name === "bash" ? lines.at(-1) : lines[0];
 }
 
-function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition): ToolDefinition {
+function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition, active: Set<RunningDots>): ToolDefinition {
   return {
     ...base,
     renderShell: "self",
@@ -92,14 +111,24 @@ function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition
       return getTool(context.cwd).execute(id, params, signal, onUpdate, context);
     },
     renderCall(args, theme, context) {
-      if (!context.isPartial) return new Container();
+      let dots = context.state.dots as RunningDots | undefined;
+      if (!context.isPartial) {
+        dots?.stop();
+        return new Container();
+      }
+      if (context.executionStarted && !dots) {
+        dots = new RunningDots(context.invalidate, active);
+        context.state.dots = dots;
+      }
       return new SummaryLine(
-        "…", base.name, targetFor(base.name, args as Args), "",
-        (text) => theme.fg("text", text), (text) => theme.fg("text", text),
+        "...", base.name, targetFor(base.name, args as Args), "",
+        (text) => [...text].map((dot, index) => theme.fg(index === (dots?.frame ?? 0) ? "text" : "dim", dot)).join(""),
+        (text) => theme.fg("text", text),
       );
     },
     renderResult(result, options, theme, context) {
       if (options.isPartial) return new Container();
+      (context.state.dots as RunningDots | undefined)?.stop();
       const suffix = !context.isError && base.name === "edit" ? diffCount(result.details) ?? "" : "";
       const summary = new SummaryLine(
         context.isError ? "✗" : "✓",
@@ -122,6 +151,12 @@ function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition
 }
 
 export default function piZen(pi: ExtensionAPI): void {
+  const active = new Set<RunningDots>();
+  const stopAnimations = () => {
+    for (const dots of active) dots.stop();
+  };
+  pi.on("agent_end", stopAnimations);
+  pi.on("session_shutdown", stopAnimations);
   pi.on("session_start", (_event, context) => {
     const initiallyActive = pi.getActiveTools();
     const configured = new Map(pi.getAllTools().map((tool) => [tool.name, tool]));
@@ -140,7 +175,7 @@ export default function piZen(pi: ExtensionAPI): void {
       // Never replace a same-name tool already owned by another extension or SDK caller.
       if (!current || current.sourceInfo.source !== "builtin") continue;
       const standard = factory(context.cwd) as ToolDefinition;
-      pi.registerTool(decorate(standard, (cwd) => factory(cwd) as ToolDefinition));
+      pi.registerTool(decorate(standard, (cwd) => factory(cwd) as ToolDefinition, active));
     }
     // Force Pi to resolve the newly registered definitions, then restore the exact enabled set.
     pi.setActiveTools(initiallyActive.filter((name) => !factories[name as keyof typeof factories]));
