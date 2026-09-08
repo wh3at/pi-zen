@@ -1,7 +1,10 @@
 {
-  "name": "pi-zen",
+  "name": "@wh3at_dev/pi-zen",
   "version": "0.1.0",
   "description": "Minimal tool summaries for pi",
+  "publishConfig": {
+    "access": "public"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/wh3at/pi-zen.git"

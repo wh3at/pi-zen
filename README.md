@@ -10,7 +10,7 @@ A pi extension that replaces built-in tool output with short summaries.
 ## Installation
 
 ```bash
-pi install git:github.com/wh3at/pi-zen
+pi install npm:@wh3at_dev/pi-zen
 ```
 
 Requires pi 0.85.1 or later.
