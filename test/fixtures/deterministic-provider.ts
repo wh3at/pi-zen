@@ -1,3 +1,5 @@
+import { appendFileSync, readFileSync } from "node:fs";
+import type { Call } from "./isolated-pi.js";
 import {
   createAssistantMessageEventStream,
   type AssistantMessage,
@@ -29,18 +31,21 @@ function streamFixture(model: Model<any>, context: Context, _options?: SimpleStr
   queueMicrotask(() => {
     const output = message(model);
     stream.push({ type: "start", partial: output });
-    const hasToolResult = context.messages.some((entry) => entry.role === "toolResult");
-    if (!hasToolResult) {
-      const toolCall = {
-        type: "toolCall" as const,
-        id: "fixture-call",
-        name: "bash",
-        arguments: { command: "sleep 2; echo SElEREVOX1RPT0xfQk9EWQ== | base64 -d" },
-      };
-      output.content.push(toolCall);
-      stream.push({ type: "toolcall_start", contentIndex: 0, partial: output });
-      stream.push({ type: "toolcall_delta", contentIndex: 0, delta: JSON.stringify(toolCall.arguments), partial: output });
-      stream.push({ type: "toolcall_end", contentIndex: 0, toolCall, partial: output });
+    if (process.env.PI_ZEN_REQUESTS) appendFileSync(process.env.PI_ZEN_REQUESTS, JSON.stringify(context) + "\n");
+    const batches: Call[][] = process.env.PI_ZEN_SCENARIO
+      ? JSON.parse(readFileSync(process.env.PI_ZEN_SCENARIO, "utf8"))
+      : [[{ name: "bash", arguments: { command: "sleep 2; echo SElEREVOX1RPT0xfQk9EWQ== | base64 -d" } }]];
+    const lastUser = context.messages.map((entry) => entry.role).lastIndexOf("user");
+    const turn = context.messages.slice(lastUser + 1).filter((entry) => entry.role === "assistant").length;
+    const calls = batches[turn];
+    if (calls) {
+      for (const [contentIndex, call] of calls.entries()) {
+        const toolCall = { type: "toolCall" as const, id: `fixture-${lastUser}-${turn}-${contentIndex}`, ...call };
+        output.content.push(toolCall);
+        stream.push({ type: "toolcall_start", contentIndex, partial: output });
+        stream.push({ type: "toolcall_delta", contentIndex, delta: JSON.stringify(toolCall.arguments), partial: output });
+        stream.push({ type: "toolcall_end", contentIndex, toolCall, partial: output });
+      }
       output.stopReason = "toolUse";
     } else {
       const block = { type: "text" as const, text: "FIXTURE_DONE" };
@@ -66,9 +71,9 @@ export default function deterministicProvider(pi: ExtensionAPI): void {
       id: "fixture",
       name: "fixture",
       reasoning: false,
-      input: ["text"],
+      input: ["text", "image"],
       cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-      contextWindow: 16_384,
+      contextWindow: 128_000,
       maxTokens: 1_024,
     }],
     streamSimple: streamFixture,
