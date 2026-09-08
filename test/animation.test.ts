@@ -1,9 +1,12 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-agent";
 import { visibleWidth } from "@earendil-works/pi-tui";
 import piZen from "../src/index.js";
 
-const names = ["write", "edit", "grep", "find", "ls"];
+const names = ["read", "write", "edit", "bash", "grep", "find", "ls"];
 const theme = { fg: (color: string, text: string) => `\x1b[${color === "dim" ? 90 : 37}m${text}\x1b[39m` } as never;
 const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -30,8 +33,18 @@ function context(): Parameters<NonNullable<ToolDefinition["renderCall"]>>[2] {
   };
 }
 
-beforeEach(() => vi.useFakeTimers());
-afterEach(() => { vi.clearAllTimers(); vi.useRealTimers(); });
+let agentDir: string;
+beforeEach(() => {
+  agentDir = mkdtempSync(join(tmpdir(), "pi-zen-animation-"));
+  vi.stubEnv("PI_CODING_AGENT_DIR", agentDir);
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.clearAllTimers();
+  vi.useRealTimers();
+  vi.unstubAllEnvs();
+  rmSync(agentDir, { recursive: true, force: true });
+});
 
 it.each(names)("%sの明るい点が300msごとに0〜3個に増え、再描画でも周期と幅を保つ", (name) => {
   const { tools } = setup();

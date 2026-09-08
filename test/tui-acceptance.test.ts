@@ -15,11 +15,12 @@ afterEach(async () => {
   await Promise.all(terminals.splice(0).map((terminal) => terminal.closeQuiet()));
 });
 
-async function runPi(cols: number) {
+async function runPi(cols: number, bash?: boolean) {
   const cwd = await mkdtemp(join(tmpdir(), "pi-zen-tui-cwd-"));
   const agentDir = await mkdtemp(join(tmpdir(), "pi-zen-tui-agent-"));
   await mkdir(join(agentDir, "sessions"), { recursive: true });
   await writeFile(join(agentDir, "settings.json"), JSON.stringify({ quietStartup: true }));
+  if (bash !== undefined) await writeFile(join(agentDir, "pi-zen.json"), JSON.stringify({ bash }));
   const terminal = TuiTest.ephemeral("pi-zen", {
     backend: "xtermjs",
     recording: { mode: "disabled" },
@@ -56,7 +57,7 @@ function summaryRows(screen: string): string[] {
 describe("実PTYでpi-zenを読み込んだpiセッション", () => {
   for (const width of [40, 64, 100]) {
     it(`${width}桁でbashを標準表示のまま実行し、出力を表示する`, async () => {
-      const terminal = await runPi(width);
+      const terminal = await runPi(width, false);
       await terminal.getByText("$ sleep 2; echo").expect();
       expect(summaryRows(await terminal.text({ full: true }))).toEqual([]);
       await terminal.getByText("FIXTURE_DONE").expect();
@@ -65,10 +66,32 @@ describe("実PTYでpi-zenを読み込んだpiセッション", () => {
       expect(summaryRows(completed)).toEqual([]);
       expect((await terminal.getSize()).cols).toBe(width);
     }, 20_000);
+
+    it(`${width}桁でデフォルトのbash要約を実行中から完了へ更新し、出力を省略する`, async () => {
+      const terminal = await runPi(width);
+      await terminal.getByText("... bash sleep 2; echo").expect();
+      const running = await terminal.text({ full: true });
+      expect(summaryRows(running)).toHaveLength(1);
+      expect(running).not.toContain("HIDDEN_TOOL_BODY");
+      const runningRow = (await terminal.getByText("... bash sleep 2; echo").location()).start.row;
+      await terminal.getByText("✓ bash sleep 2; echo").expect();
+      const completedRow = (await terminal.getByText("✓ bash sleep 2; echo").location()).start.row;
+      expect(completedRow).toBe(runningRow);
+      await terminal.getByText("FIXTURE_DONE").expect();
+      if (width === 100) {
+        await terminal.resize(40, 20);
+        await terminal.waitIdle();
+      }
+      const completed = await terminal.text({ full: true });
+      expect(summaryRows(completed)).toHaveLength(1);
+      expect(completed).not.toContain("HIDDEN_TOOL_BODY");
+      expect(completed).not.toContain("... bash");
+      expect(summaryRows(completed)[0]!.trimEnd().length).toBeLessThanOrEqual(Math.min(width, 64));
+    }, 20_000);
   }
 
   it("実行中と完了後のresizeでもbashの標準表示を維持する", async () => {
-    const terminal = await runPi(100);
+    const terminal = await runPi(100, false);
     await terminal.getByText("$ sleep 2; echo").expect();
     await terminal.resize(40, 20);
     await terminal.getByText("$ sleep 2; echo").expect();

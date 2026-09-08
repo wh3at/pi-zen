@@ -1,7 +1,7 @@
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createAgentSession,
   DefaultResourceLoader,
@@ -10,8 +10,10 @@ import {
 } from "@earendil-works/pi-coding-agent";
 
 const extensionPath = resolve("src/index.ts");
+afterEach(() => vi.unstubAllEnvs());
 
 async function loadedSession(cwd: string, tools: string[]) {
+  vi.stubEnv("PI_CODING_AGENT_DIR", join(cwd, ".agent"));
   const settingsManager = SettingsManager.inMemory();
   const loader = new DefaultResourceLoader({
     cwd,

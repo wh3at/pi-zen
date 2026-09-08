@@ -41,26 +41,28 @@ function toolRows(screen: string) {
 }
 
 for (const width of [40, 64, 100]) {
-  it(`${width}桁で対象5ツールの成功1行・失敗2行、本文非表示、枠・背景なしを保つ`, async () => {
-    const summarized = toolNames.filter((name) => name !== "read" && name !== "bash");
-    const fixture = await setup(cases.slice(0, 14).filter(({ call }) => summarized.includes(call.name)).map(({ call }) => [call]));
+  it(`${width}桁で全7ツールの成功1行・失敗2行、本文非表示、枠・背景なしを保つ`, async () => {
+    const fixture = await setup(cases.slice(0, 14).map(({ call }) => [call]));
     const terminal = await launch(fixture, width);
     await terminal.submit("run fixture");
     await terminal.getByText("FIXTURE_DONE").expect();
     const screen = await terminal.text({ full: true });
     const rows = toolRows(screen);
-    expect(rows).toHaveLength(10);
+    expect(rows).toHaveLength(14);
     expect(rows.map((row) => row.split(" ").slice(0, 2).join(" "))).toEqual(
-      [...summarized.map((name) => `✓ ${name}`), ...summarized.map((name) => `✗ ${name}`)],
+      [...toolNames.map((name) => `✓ ${name}`), ...toolNames.map((name) => `✗ ${name}`)],
     );
-    expect(rows[0]).toBe("✓ write written.txt");
-    expect(rows[1]).toBe("✓ edit source.txt +2 -1");
-    expect(rows[2]).toBe("✓ grep HIDDEN · search");
-    expect(rows[3]).toBe("✓ find *.txt · search");
-    expect(rows[4]).toBe("✓ ls search");
-    const transcript = screen.slice(screen.indexOf("✓ write written.txt"), screen.indexOf("FIXTURE_DONE"));
-    expect(transcript.split("\n").filter((row) => row.trim())).toHaveLength(15);
-    for (const marker of ["HIDDEN_WRITE_BODY", "HIDDEN_SEARCH_BODY", "HIDDEN_FILENAME"]) {
+    expect(rows[0]).toBe("✓ read source.txt");
+    expect(rows[1]).toBe("✓ write written.txt");
+    expect(rows[2]).toBe("✓ edit source.txt +2 -1");
+    expect(rows[3]).toMatch(/^✓ bash printf /);
+    expect(rows[4]).toBe("✓ grep HIDDEN · search");
+    expect(rows[5]).toBe("✓ find *.txt · search");
+    expect(rows[6]).toBe("✓ ls search");
+    const transcript = screen.slice(screen.indexOf("✓ read source.txt"), screen.indexOf("FIXTURE_DONE"));
+    expect(transcript.split("\n").filter((row) => row.trim())).toHaveLength(21);
+    expect(transcript).toContain("Command exited with code 7");
+    for (const marker of ["HIDDEN_WRITE_BODY", "HIDDEN_BASH_BODY", "HIDDEN_SEARCH_BODY", "HIDDEN_FILENAME", "HIDDEN_ERROR_LOG"]) {
       expect(transcript).not.toContain(marker);
     }
     for (const row of rows) {
@@ -136,31 +138,31 @@ it("日本語の長いパスは途中省略し、editのゼロ差分数とwrite�
   expect(toolRows(await terminal.text({ full: true }))).toHaveLength(4);
 }, 20_000);
 
-it("同じbashの並行実行は標準表示と出力を維持する", async () => {
+it("同じbashの並行実行は要約の順序を維持し、出力を省略する", async () => {
   const fixture = await setup([[
     { name: "bash", arguments: { command: "sleep 3; printf first" } },
     { name: "bash", arguments: { command: "printf second" } },
   ]]);
   const terminal = await launch(fixture);
   await terminal.submit("run fixture");
-  await terminal.getByText("$ printf second").expect();
+  await terminal.getByText("✓ bash printf second").expect();
+  expect(toolRows(await terminal.text({ full: true }))).toEqual(["... bash sleep 3; printf first", "✓ bash printf second"]);
   await terminal.getByText("FIXTURE_DONE").expect();
   const screen = await terminal.text({ full: true });
-  expect(toolRows(screen)).toEqual([]);
-  expect(screen.indexOf("$ sleep 3; printf first")).toBeLessThan(screen.indexOf("$ printf second"));
-  expect(screen.split("\n").map((line) => line.trim())).toEqual(expect.arrayContaining(["first", "second"]));
+  expect(toolRows(screen)).toEqual(["✓ bash sleep 3; printf first", "✓ bash printf second"]);
+  expect(screen.split("\n").filter((line) => /^(first|second)\s*$/.test(line))).toEqual([]);
 }, 20_000);
 
-it("標準bashのEscape中断と保存済み理由を維持する", async () => {
+it("bash要約のEscape中断と保存済み理由を維持する", async () => {
   const fixture = await setup([[{ name: "bash", arguments: { command: "sleep 30" } }]]);
   const terminal = await launch(fixture, 40);
   await terminal.submit("run fixture");
-  await terminal.getByText("Elapsed").expect();
+  await terminal.getByText("... bash sleep 30").expect();
   await terminal.press("Escape");
   await terminal.getByText("Command aborted").expect();
   await terminal.waitIdle();
   const screen = await terminal.text({ full: true });
-  expect(toolRows(screen)).toEqual([]);
+  expect(toolRows(screen)).toEqual(["✗ bash sleep 30"]);
   const [file] = await readdir(fixture.sessionDir);
   const entries = (await readFile(join(fixture.sessionDir, file!), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
   const result = entries.find((entry) => entry.message?.role === "toolResult").message;
@@ -171,11 +173,12 @@ it("標準bashのEscape中断と保存済み理由を維持する", async () => 
   expect(screen).not.toContain("中断しました");
 }, 20_000);
 
-for (const showImages of [true, false]) {
-  it(`画像readは標準画像プロトコルとshowImages=${showImages}を再開後も尊重する`, async () => {
+for (const [readSummary, showImages] of [[true, true], [true, false], [false, true], [false, false]]) {
+  it(`画像readは要約=${readSummary}でも標準画像プロトコルとshowImages=${showImages}を再開後も尊重する`, async () => {
     const fixture = await setup([[{ name: "read", arguments: { path: "image.png" } }]], {
       terminal: { images: "iterm2", showImages },
     });
+    await writeFile(join(fixture.agentDir, "pi-zen.json"), JSON.stringify({ read: readSummary }));
     const first = await launch(fixture);
     const capture = join(fixture.root, "image.cast");
     await first.startRecording(capture, { format: "cast" });
@@ -185,7 +188,7 @@ for (const showImages of [true, false]) {
     const output = (await readFile(capture, "utf8")).trim().split("\n").slice(1)
       .map((line) => JSON.parse(line)).filter((event) => event[1] === "o").map((event) => event[2]).join("");
     expect(output.includes("\x1b]1337;File=")).toBe(showImages);
-    expect(toolRows(await first.text({ full: true }))).toEqual([]);
+    expect(toolRows(await first.text({ full: true }))).toEqual(readSummary ? ["✓ read image.png"] : []);
     expect(await first.text({ full: true })).toContain("image.png");
     await first.submit("/quit");
     await first.waitExit();
@@ -195,7 +198,7 @@ for (const showImages of [true, false]) {
     const imageResult = entries.find((entry) => entry.message?.role === "toolResult").message;
     expect(imageResult.content.some((block: any) => block.type === "image")).toBe(true);
     const resumed = await launch(fixture, 100, session);
-    expect(toolRows(await resumed.text({ full: true }))).toEqual([]);
+    expect(toolRows(await resumed.text({ full: true }))).toEqual(readSummary ? ["✓ read image.png"] : []);
     expect(await resumed.text({ full: true })).toContain("image.png");
     // Force a width change to capture the resumed image's redraw.
     const resumedCapture = join(fixture.root, "resumed-image.cast");

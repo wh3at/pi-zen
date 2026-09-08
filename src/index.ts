@@ -1,4 +1,9 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import {
+  createBashToolDefinition,
+  createReadToolDefinition,
+  getAgentDir,
   createEditToolDefinition,
   createFindToolDefinition,
   createGrepToolDefinition,
@@ -9,6 +14,25 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { Container, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
 type Args = Record<string, unknown>;
+
+function loadSettings(): { bash?: boolean; read?: boolean } {
+  const path = join(getAgentDir(), "pi-zen.json");
+  try {
+    const settings = JSON.parse(readFileSync(path, "utf8"));
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
+      throw new Error("Expected a JSON object");
+    }
+    for (const key of ["bash", "read"]) {
+      if (settings[key] !== undefined && typeof settings[key] !== "boolean") {
+        throw new Error(`${key} must be a boolean`);
+      }
+    }
+    return settings;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw new Error(`Could not load ${path}`, { cause: error });
+  }
+}
 
 class SummaryLine implements Component {
   constructor(
@@ -149,6 +173,7 @@ function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition
 }
 
 export default function piZen(pi: ExtensionAPI): void {
+  const settings = loadSettings();
   const active = new Set<RunningDots>();
   const stopAnimations = () => {
     for (const dots of active) dots.stop();
@@ -158,9 +183,10 @@ export default function piZen(pi: ExtensionAPI): void {
   pi.on("session_start", (_event, context) => {
     const initiallyActive = pi.getActiveTools();
     const configured = new Map(pi.getAllTools().map((tool) => [tool.name, tool]));
-    // Recreating bash/read would discard session shell and image settings.
-    // Keep their configured built-ins until Pi supports rendering-only overrides.
+    // Opt-outs retain Pi's configured executors, not just its standard renderers.
     const factories = {
+      ...(settings.read !== false ? { read: createReadToolDefinition } : {}),
+      ...(settings.bash !== false ? { bash: createBashToolDefinition } : {}),
       write: createWriteToolDefinition,
       edit: createEditToolDefinition,
       grep: createGrepToolDefinition,
