@@ -28,9 +28,7 @@ async function loadedSession(cwd: string, tools: string[]) {
     sessionManager: SessionManager.inMemory(cwd),
     sessionStartEvent: { type: "session_start", reason: "startup" },
   });
-  const extension = loaded.extensionsResult.extensions.find((item) => item.resolvedPath === extensionPath)!;
-  const start = extension.handlers.get("session_start")![0]!;
-  await start({ type: "session_start", reason: "startup" }, { cwd } as never);
+  await loaded.session.bindExtensions({ mode: "rpc" });
   return loaded;
 }
 
@@ -73,10 +71,14 @@ describe("pi-zenを読み込んだpiセッション", () => {
     const edit = extension.tools.get("edit")!.definition;
     const bash = extension.tools.get("bash")!.definition;
     expect(edit.renderShell).toBe("self");
+    expect(edit.promptSnippet).toBe(
+      "Make precise file edits with exact text replacement, including multiple disjoint edits in one call",
+    );
+    expect(edit.promptGuidelines).toHaveLength(4);
     const theme = { fg: (_color: string, text: string) => text } as never;
-    const context = (args: object, isError = false) => ({
+    const context = (args: object, isError = false, isPartial = false) => ({
       args, state: {}, lastComponent: undefined, invalidate() {}, toolCallId: "call", cwd,
-      executionStarted: true, argsComplete: true, isPartial: false, expanded: true, showImages: true, isError,
+      executionStarted: true, argsComplete: true, isPartial, expanded: true, showImages: true, isError,
     });
 
     const editResult = edit.renderResult!(
@@ -84,13 +86,21 @@ describe("pi-zenを読み込んだpiセッション", () => {
       { expanded: true, isPartial: false }, theme, context({ path: "日本語/とても長い名前/source.txt" }),
     );
     const bashError = bash.renderResult!(
-      { content: [{ type: "text", text: "Command exited with code 7\nlarge log" }], details: {} },
+      { content: [{ type: "text", text: "large log\n\nCommand exited with code 7" }], details: {} },
       { expanded: true, isPartial: false }, theme, context({ command: "printf a-very-long-command" }, true),
+    );
+    const resumedCall = edit.renderCall!(
+      { path: "source.txt" }, theme, context({ path: "source.txt" }),
+    );
+    const multilineCall = bash.renderCall!(
+      { command: "printf first\nprintf second" }, theme, context({ command: "printf first\nprintf second" }, false, true),
     );
 
     const plain = (lines: string[]) => lines.map((line) => line.replace(/\u001b\[[0-9;]*m/g, ""));
     expect(plain(editResult.render(30))).toEqual(["✓ edit 日本語/…urce.txt +2 -1"]);
     expect(plain(bashError.render(24))).toEqual(["✗ bash printf a-very-lo…", "Command exited with cod…"]);
+    expect(resumedCall.render(30)).toEqual([]);
+    expect(plain(multilineCall.render(40))).toEqual(["… bash printf first printf second"]);
     session.dispose();
   });
 });

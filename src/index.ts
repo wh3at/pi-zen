@@ -1,11 +1,11 @@
 import {
-  createBashTool,
-  createEditTool,
-  createFindTool,
-  createGrepTool,
-  createLsTool,
-  createReadTool,
-  createWriteTool,
+  createBashToolDefinition,
+  createEditToolDefinition,
+  createFindToolDefinition,
+  createGrepToolDefinition,
+  createLsToolDefinition,
+  createReadToolDefinition,
+  createWriteToolDefinition,
   type ExtensionAPI,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
@@ -50,11 +50,15 @@ function middleTruncate(value: string, width: number): string {
   return `${left}…${right}`;
 }
 
+function singleLine(value: string): string {
+  return value.replace(/[\r\n\t]+/g, " ").replace(/ {2,}/g, " ").trim();
+}
+
 function targetFor(name: string, args: Args): string {
-  const text = (key: string, fallback = "") => typeof args[key] === "string" ? args[key] as string : fallback;
+  const text = (key: string, fallback = "") => singleLine(typeof args[key] === "string" ? args[key] as string : fallback);
   switch (name) {
     case "bash": return text("command");
-    case "grep": return `${text("pattern")} · ${text("path", ".")}`;
+    case "grep":
     case "find": return `${text("pattern")} · ${text("path", ".")}`;
     case "ls": return text("path", ".");
     default: return text("path");
@@ -72,9 +76,11 @@ function diffCount(details: unknown): string | undefined {
   return `+${added} -${removed}`;
 }
 
-function firstReason(content: Array<{ type: string; text?: string }>): string | undefined {
+function failureReason(name: string, content: Array<{ type: string; text?: string }>): string | undefined {
   const text = content.find((part) => part.type === "text" && part.text)?.text;
-  return text?.split(/\r?\n/, 1)[0] || undefined;
+  if (!text) return undefined;
+  const lines = text.split(/\r?\n/).map(singleLine).filter(Boolean);
+  return name === "bash" ? lines.at(-1) : lines[0];
 }
 
 function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition): ToolDefinition {
@@ -85,7 +91,7 @@ function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition
       return getTool(context.cwd).execute(id, params, signal, onUpdate, context);
     },
     renderCall(args, theme, context) {
-      if (!context.isPartial && context.executionStarted) return new Container();
+      if (!context.isPartial) return new Container();
       return new SummaryLine("…", base.name, targetFor(base.name, args as Args), "", (text) => theme.fg("warning", text));
     },
     renderResult(result, options, theme, context) {
@@ -98,7 +104,7 @@ function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition
         suffix,
         (text) => theme.fg(context.isError ? "error" : "success", text),
       );
-      const reason = context.isError ? firstReason(result.content) : undefined;
+      const reason = context.isError ? failureReason(base.name, result.content) : undefined;
       if (!reason) return summary;
       return {
         render(width) {
@@ -115,13 +121,13 @@ export default function piZen(pi: ExtensionAPI): void {
     const initiallyActive = pi.getActiveTools();
     const configured = new Map(pi.getAllTools().map((tool) => [tool.name, tool]));
     const factories = {
-      read: createReadTool,
-      write: createWriteTool,
-      edit: createEditTool,
-      bash: createBashTool,
-      grep: createGrepTool,
-      find: createFindTool,
-      ls: createLsTool,
+      read: createReadToolDefinition,
+      write: createWriteToolDefinition,
+      edit: createEditToolDefinition,
+      bash: createBashToolDefinition,
+      grep: createGrepToolDefinition,
+      find: createFindToolDefinition,
+      ls: createLsToolDefinition,
     } as const;
 
     for (const [name, factory] of Object.entries(factories)) {
