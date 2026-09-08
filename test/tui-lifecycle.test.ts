@@ -1,4 +1,4 @@
-import { readFile, readdir, rm } from "node:fs/promises";
+import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { TuiTest } from "@microsoft/tui-test";
 import { afterEach, expect, it } from "vitest";
@@ -98,18 +98,24 @@ it("実保存した成功・失敗・edit差分を再開し、展開キーでも
   expect(await readFile(session, "utf8")).toBe(savedBefore);
 }, 30_000);
 
-// Pi 0.85.1 rebuilds historical rows before session_start installs dynamic renderers.
-// Keep the failing acceptance condition reproducible, not counted as a pass.
-it.skipIf(!process.env.PI_ZEN_CHECK_RELOAD)("reload後も過去のツール要約を維持する（既知の未達）", async () => {
+// Historical rows may use Pi's standard renderer after reload.
+it("reloadで保存内容を変えず、その後の呼出しにはツール要約を使う", async () => {
   const fixture = await setup([[cases[2]!.call]]);
   const terminal = await launch(fixture);
   await terminal.submit("run fixture");
   await terminal.getByText("FIXTURE_DONE").expect();
   expect(toolRows(await terminal.text({ full: true }))).toEqual(["✓ edit source.txt +2 -1"]);
+  const [file] = await readdir(fixture.sessionDir);
+  const session = join(fixture.sessionDir, file!);
+  const saved = await readFile(session, "utf8");
   await terminal.submit("/reload");
   await terminal.getByText("Reloaded").expect();
-  await terminal.getByText("✓ edit source.txt +2 -1").expect();
-  expect(await terminal.text({ full: true })).not.toContain("+1 after");
+  expect(await readFile(session, "utf8")).toBe(saved);
+  expect(await readFile(join(fixture.cwd, "source.txt"), "utf8")).toBe("after\nadded\n");
+  await writeFile(fixture.scenario, JSON.stringify([[{ name: "read", arguments: { path: "source.txt" } }]]));
+  await terminal.submit("after reload");
+  await terminal.getByText("✓ read source.txt").expect();
+  expect(toolRows(await terminal.text({ full: true })).filter((row) => row.includes(" read "))).toEqual(["✓ read source.txt"]);
 }, 20_000);
 
 it("日本語の長いパスは途中省略し、editのゼロ差分数とwriteの数値省略を保つ", async () => {

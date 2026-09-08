@@ -2,7 +2,7 @@
 
 2026-09-08、Linux / Node 24.20.0 / pi 0.85.1で確認。`npm view @earendil-works/pi-coding-agent version`も0.85.1を返したため、最低対応版と最新安定版の試験は共通。競合する同名overrideは読み込んでいない。
 
-**受け入れは未完了。** 通常の試験は23成功・1スキップ。スキップは確認済みのreload不具合であり、成功として数えない。
+通常の試験は24成功・スキップなし。`/reload`後に過去の行が標準表示へ戻ることは、2026-09-08のユーザー合意により許容動作とする。下記の未確認項目は残っており、全受け入れ条件の確認完了とは扱わない。
 
 ## 起動の隔離
 
@@ -36,23 +36,21 @@
 | Escapeによるbash中断、保存済み標準理由`Command aborted`、実行中表示の消去 | 成功 |
 | 実保存した成功・失敗・edit差分の再開、展開キーでも本文非表示 | 成功 |
 | 画像readのiTerm2プロトコル出力と`showImages`有効／無効、画像保存・再開後リサイズ | 成功。PTY出力のOSC 1337を記録して検証。実端末での画像ピクセル描画は未確認 |
-| 待機中の`/reload`後も過去の要約を維持 | **失敗**。下記参照 |
+| 待機中の`/reload`で保存内容を変えず、その後の呼出しに要約を使用 | 成功。過去の行が標準表示へ戻ることは許容 |
 
 試験本体は`test/cli-acceptance.test.ts`、`test/tui-lifecycle.test.ts`、既存の`test/tui-acceptance.test.ts`。SDK試験は`test/pi-session.test.ts`。
 
-## reloadの既知の不具合
+## reloadの許容動作
 
-再現コマンド:
+2026-09-08のユーザー合意により、`/reload`後に過去のツール行が標準表示へ戻ることは正常な許容動作とし、修正対象・受け入れ阻害要因から外した。これはreload前の行に限る例外であり、通常時の本文非表示、セッション再開時の要約表示、reload後の新しい呼出しの要約表示は維持する。
+
+pi 0.85.1はreload時に過去の行を再構築してから`session_start`を発火する。pi-zenはこのイベントでツールを登録するため、過去の行は標準rendererを保持する。ツールの再実行や保存内容の変更ではない。
+
+旧条件のスキップ試験は廃止し、保存内容・ファイル作用が変わらず、その後の新しい呼出しが要約表示になることを通常のPTY試験で確認する。
 
 ```bash
-PI_ZEN_CHECK_RELOAD=1 npm test -- test/tui-lifecycle.test.ts -t 'reload後'
+npm test -- test/tui-lifecycle.test.ts -t 'reload'
 ```
-
-標準editを実行して`✓ edit source.txt +2 -1`を確認した後、`/reload`すると要約が消え、標準の`edit source.txt`と`-1 before / +1 after / +2 added`が再表示される。CLIの`-e`指定でも設定ファイル経由でも再現した。
-
-pi 0.85.1の`InteractiveMode.handleReloadCommand()`は、`AgentSession.reload()`の`beforeSessionStart`コールバックで過去の行を再構築する。その後に`session_start`が発火する。pi-zenは有効集合と他extensionの所有権を確認するため、このイベントでツールを登録している。過去の行は登録前の標準rendererを保持する。
-
-初期ロード中には`getActiveTools()` / `getAllTools()`を呼べないため、登録だけをfactory直下へ移すと有効集合・所有権確認の前提が崩れる。pi本体の改変やprivate APIへの依存は追加していない。通常実行ではこの回帰試験を明示的にスキップし、環境変数付きで失敗を再現できるよう残した。**pi側の再描画順序の修正など、別途の対応判断が必要。**
 
 ## 残る未確認項目
 
@@ -67,4 +65,4 @@ npm test
 npm run typecheck
 ```
 
-通常試験の成功は、上の未達・未確認項目を含めた全受け入れ条件の合格を意味しない。
+通常試験の成功は、上の未確認項目を含めた全受け入れ条件の合格を意味しない。
