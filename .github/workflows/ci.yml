@@ -18,6 +18,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # pi の grep/find は rg / fd バイナリを必要とする。フィクスチャは --offline で
+      # 自動ダウンロードを禁止しているため、runner に先に入れておく必要がある
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep fd-find
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
