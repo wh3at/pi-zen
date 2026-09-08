@@ -1,7 +1,15 @@
 {
   "name": "pi-zen",
   "version": "0.1.0",
-  "private": true,
+  "description": "Minimal tool summaries for pi",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wh3at/pi-zen.git"
+  },
+  "files": [
+    "src",
+    "docs/acceptance.md"
+  ],
   "type": "module",
   "keywords": [
     "pi-package"
@@ -13,12 +21,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@earendil-works/pi-coding-agent": ">=0.85.1",
-    "@earendil-works/pi-tui": ">=0.85.1"
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
   },
   "devDependencies": {
     "@earendil-works/pi-ai": "0.85.1",
+    "@earendil-works/pi-coding-agent": "0.85.1",
+    "@earendil-works/pi-tui": "0.85.1",
     "@microsoft/tui-test": "0.1.0-beta.3",
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0",
