@@ -72,7 +72,7 @@ summary { cursor: pointer; font-size: 13px; color: #a8adb7; }
 <div class="input">› 次のメッセージを入力…</div>
 <div class="footer">~/Work/example · main</div>
 </section>
-<p>採用方針：A案。長いパスは途中を「…」で省略、コマンドは末尾省略。差分数はeditのみ。失敗理由は別の1行、画像は例外として残します。<br>残る仮案：呼び出しごとに1行、空行・集約なし。幅が足りない場合も状態・ツール名・差分数を優先します。B/Cは比較記録として残しています。</p>
+<p>採用方針：A案。長いパスは途中を「…」で省略、コマンドは末尾省略。差分数はeditの成功後のみ、ゼロも含めて両方表示し、取得できなければ省略します。<br>失敗理由は元のエラー文・終了コードなど実際の結果だけを別の1行に表示し、独自の文章を足しません。理由がなければ失敗の要約行のみ。画像は例外として残します。<br>呼び出しごとに1行、空行・枠・背景色・集約・完了順の並べ替えなし。検索は条件と対象のみ。製品の色はpiテーマに従います（この見本の色は固定）。B/Cは比較記録です。正式な判断記録は<a href="https://github.com/wh3at/pi-zen/issues/3">1行要約の見た目と状態変化をどう表現するか</a>を参照してください。</p>
 <details open><summary>試作の状態（表示案の一部ではありません）</summary><pre id="state"></pre></details>
 <nav class="switcher" aria-label="表示案の切り替え"><button id="prev" aria-label="前の案">←</button><span id="variantName"></span><button id="next" aria-label="次の案">→</button></nav>
 <script>
