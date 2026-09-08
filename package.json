@@ -3,8 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "keywords": ["pi-package"],
-  "engines": { "node": ">=20" },
+  "keywords": [
+    "pi-package"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -14,9 +18,15 @@
     "@earendil-works/pi-tui": ">=0.85.1"
   },
   "devDependencies": {
+    "@earendil-works/pi-ai": "0.85.1",
+    "@microsoft/tui-test": "0.1.0-beta.3",
     "@types/node": "^24.0.0",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0"
   },
-  "pi": { "extensions": ["./src/index.ts"] }
+  "pi": {
+    "extensions": [
+      "./src/index.ts"
+    ]
+  }
 }
