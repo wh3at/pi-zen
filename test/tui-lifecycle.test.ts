@@ -41,30 +41,28 @@ function toolRows(screen: string) {
 }
 
 for (const width of [40, 64, 100]) {
-  it(`${width}桁で全7ツールの成功1行・失敗2行、本文非表示、枠・背景なしを保つ`, async () => {
-    const fixture = await setup(cases.slice(0, 14).map(({ call }) => [call]));
+  it(`${width}桁で対象5ツールの成功1行・失敗2行、本文非表示、枠・背景なしを保つ`, async () => {
+    const summarized = toolNames.filter((name) => name !== "read" && name !== "bash");
+    const fixture = await setup(cases.slice(0, 14).filter(({ call }) => summarized.includes(call.name)).map(({ call }) => [call]));
     const terminal = await launch(fixture, width);
     await terminal.submit("run fixture");
     await terminal.getByText("FIXTURE_DONE").expect();
     const screen = await terminal.text({ full: true });
     const rows = toolRows(screen);
-    expect(rows).toHaveLength(14);
+    expect(rows).toHaveLength(10);
     expect(rows.map((row) => row.split(" ").slice(0, 2).join(" "))).toEqual(
-      [...toolNames.map((name) => `✓ ${name}`), ...toolNames.map((name) => `✗ ${name}`)],
+      [...summarized.map((name) => `✓ ${name}`), ...summarized.map((name) => `✗ ${name}`)],
     );
-    expect(rows[0]).toBe("✓ read source.txt");
-    expect(rows[1]).toBe("✓ write written.txt");
-    expect(rows[2]).toBe("✓ edit source.txt +2 -1");
-    expect(rows[3]).toMatch(/^✓ bash printf /);
-    expect(rows[4]).toBe("✓ grep HIDDEN · search");
-    expect(rows[5]).toBe("✓ find *.txt · search");
-    expect(rows[6]).toBe("✓ ls search");
-    const transcript = screen.slice(screen.indexOf("✓ read source.txt"), screen.indexOf("FIXTURE_DONE"));
-    expect(transcript.split("\n").filter((row) => row.trim())).toHaveLength(21);
-    for (const marker of ["HIDDEN_WRITE_BODY", "HIDDEN_BASH_BODY", "HIDDEN_SEARCH_BODY", "HIDDEN_FILENAME", "HIDDEN_ERROR_LOG", "... bash"]) {
+    expect(rows[0]).toBe("✓ write written.txt");
+    expect(rows[1]).toBe("✓ edit source.txt +2 -1");
+    expect(rows[2]).toBe("✓ grep HIDDEN · search");
+    expect(rows[3]).toBe("✓ find *.txt · search");
+    expect(rows[4]).toBe("✓ ls search");
+    const transcript = screen.slice(screen.indexOf("✓ write written.txt"), screen.indexOf("FIXTURE_DONE"));
+    expect(transcript.split("\n").filter((row) => row.trim())).toHaveLength(15);
+    for (const marker of ["HIDDEN_WRITE_BODY", "HIDDEN_SEARCH_BODY", "HIDDEN_FILENAME"]) {
       expect(transcript).not.toContain(marker);
     }
-    expect(transcript).toContain("Command exited with code 7");
     for (const row of rows) {
       const location = await terminal.getByText(row, { whitespace: "exact" }).location();
       const cells = await terminal.cells(0, location.start.row, width, row.startsWith("✗") ? 2 : 1);
@@ -76,13 +74,13 @@ for (const width of [40, 64, 100]) {
 it("実保存した成功・失敗・edit差分を再開し、展開キーでも本文を再表示しない", async () => {
   const fixture = await setup([
     [{ name: "edit", arguments: { path: "source.txt", edits: [{ oldText: "before", newText: "after\nadded" }] } }],
-    [{ name: "read", arguments: { path: "missing.txt" } }],
+    [{ name: "edit", arguments: { path: "missing.txt", edits: [{ oldText: "before", newText: "after" }] } }],
   ]);
   const first = await launch(fixture);
   await first.submit("run fixture");
   await first.getByText("FIXTURE_DONE").expect();
   const before = toolRows(await first.text({ full: true }));
-  expect(before).toEqual(["✓ edit source.txt +2 -1", "✗ read missing.txt"]);
+  expect(before).toEqual(["✓ edit source.txt +2 -1", "✗ edit missing.txt"]);
   await first.submit("/quit");
   await first.waitExit();
   const [file] = await readdir(fixture.sessionDir);
@@ -94,7 +92,7 @@ it("実保存した成功・失敗・edit差分を再開し、展開キーでも
   await resumed.waitIdle();
   expect(toolRows(await resumed.text({ full: true }))).toEqual(before);
   expect(await resumed.text({ full: true })).not.toContain("+1 after");
-  expect(await resumed.text({ full: true })).toContain("ENOENT:");
+  expect(await resumed.text({ full: true })).toContain("Could not edit file: missing.txt. Error code: ENOENT.");
   expect(await readFile(session, "utf8")).toBe(savedBefore);
 }, 30_000);
 
@@ -112,15 +110,15 @@ it("reloadで保存内容を変えず、その後の呼出しにはツール要�
   await terminal.getByText("Reloaded").expect();
   expect(await readFile(session, "utf8")).toBe(saved);
   expect(await readFile(join(fixture.cwd, "source.txt"), "utf8")).toBe("after\nadded\n");
-  await writeFile(fixture.scenario, JSON.stringify([[{ name: "read", arguments: { path: "source.txt" } }]]));
+  await writeFile(fixture.scenario, JSON.stringify([[{ name: "write", arguments: { path: "written.txt", content: "after reload" } }]]));
   await terminal.submit("after reload");
-  await terminal.getByText("✓ read source.txt").expect();
-  expect(toolRows(await terminal.text({ full: true })).filter((row) => row.includes(" read "))).toEqual(["✓ read source.txt"]);
+  await terminal.getByText("✓ write written.txt").expect();
+  expect(toolRows(await terminal.text({ full: true })).filter((row) => row.includes(" write "))).toEqual(["✓ write written.txt"]);
 }, 20_000);
 
 it("日本語の長いパスは途中省略し、editのゼロ差分数とwriteの数値省略を保つ", async () => {
   const fixture = await setup([
-    [{ name: "read", arguments: { path: japanesePath } }],
+    [{ name: "write", arguments: { path: japanesePath, content: "HIDDEN_JAPANESE_BODY" } }],
     [{ name: "edit", arguments: { path: "source.txt", edits: [{ oldText: "before\n", newText: "before\nadded\n" }] } }],
     [{ name: "edit", arguments: { path: "source.txt", edits: [{ oldText: "added\n", newText: "" }] } }],
     [{ name: "write", arguments: { path: "written.txt", content: "HIDDEN_WRITE_BODY" } }],
@@ -130,39 +128,39 @@ it("日本語の長いパスは途中省略し、editのゼロ差分数とwrite�
   await terminal.getByText("FIXTURE_DONE").expect();
   const rows = toolRows(await terminal.text({ full: true }));
   expect(rows).toHaveLength(4);
-  expect(rows[0]).toMatch(/^✓ read 日本語\/.*….*ファイル名\.txt$/);
+  expect(rows[0]).toMatch(/^✓ write 日本語\/.*….*ファイル名\.txt$/);
   expect(rows.slice(1)).toEqual(["✓ edit source.txt +1 -0", "✓ edit source.txt +0 -1", "✓ write written.txt"]);
   expect(await terminal.text({ full: true })).not.toContain("HIDDEN_JAPANESE_BODY");
   await terminal.resize(100, 80);
-  await expect.poll(async () => toolRows(await terminal.text({ full: true }))[0]).toBe(`✓ read ${japanesePath}`);
+  await expect.poll(async () => toolRows(await terminal.text({ full: true }))[0]).toBe(`✓ write ${japanesePath}`);
   expect(toolRows(await terminal.text({ full: true }))).toHaveLength(4);
 }, 20_000);
 
-it("同じbashの並行実行は完了順で並べ替えず、途中ログも表示しない", async () => {
+it("同じbashの並行実行は標準表示と出力を維持する", async () => {
   const fixture = await setup([[
     { name: "bash", arguments: { command: "sleep 3; printf first" } },
     { name: "bash", arguments: { command: "printf second" } },
   ]]);
   const terminal = await launch(fixture);
   await terminal.submit("run fixture");
-  await terminal.getByText("✓ bash printf second").expect();
-  expect(toolRows(await terminal.text({ full: true }))).toEqual(["... bash sleep 3; printf first", "✓ bash printf second"]);
+  await terminal.getByText("$ printf second").expect();
   await terminal.getByText("FIXTURE_DONE").expect();
-  expect(toolRows(await terminal.text({ full: true }))).toEqual(["✓ bash sleep 3; printf first", "✓ bash printf second"]);
   const screen = await terminal.text({ full: true });
-  expect(screen.split("\n").filter((line) => /^(first|second)\s*$/.test(line))).toEqual([]);
+  expect(toolRows(screen)).toEqual([]);
+  expect(screen.indexOf("$ sleep 3; printf first")).toBeLessThan(screen.indexOf("$ printf second"));
+  expect(screen.split("\n").map((line) => line.trim())).toEqual(expect.arrayContaining(["first", "second"]));
 }, 20_000);
 
-it("実行中のbashをEscapeで中断し、標準の理由だけを残して実行中表示を消す", async () => {
+it("標準bashのEscape中断と保存済み理由を維持する", async () => {
   const fixture = await setup([[{ name: "bash", arguments: { command: "sleep 30" } }]]);
   const terminal = await launch(fixture, 40);
   await terminal.submit("run fixture");
-  await terminal.getByText("... bash sleep 30").expect();
+  await terminal.getByText("Elapsed").expect();
   await terminal.press("Escape");
-  await terminal.getByText("✗ bash sleep 30").expect();
+  await terminal.getByText("Command aborted").expect();
   await terminal.waitIdle();
   const screen = await terminal.text({ full: true });
-  expect(toolRows(screen)).toEqual(["✗ bash sleep 30"]);
+  expect(toolRows(screen)).toEqual([]);
   const [file] = await readdir(fixture.sessionDir);
   const entries = (await readFile(join(fixture.sessionDir, file!), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
   const result = entries.find((entry) => entry.message?.role === "toolResult").message;
@@ -187,7 +185,8 @@ for (const showImages of [true, false]) {
     const output = (await readFile(capture, "utf8")).trim().split("\n").slice(1)
       .map((line) => JSON.parse(line)).filter((event) => event[1] === "o").map((event) => event[2]).join("");
     expect(output.includes("\x1b]1337;File=")).toBe(showImages);
-    expect(toolRows(await first.text({ full: true }))).toEqual(["✓ read image.png"]);
+    expect(toolRows(await first.text({ full: true }))).toEqual([]);
+    expect(await first.text({ full: true })).toContain("image.png");
     await first.submit("/quit");
     await first.waitExit();
     const [file] = await readdir(fixture.sessionDir);
@@ -196,7 +195,8 @@ for (const showImages of [true, false]) {
     const imageResult = entries.find((entry) => entry.message?.role === "toolResult").message;
     expect(imageResult.content.some((block: any) => block.type === "image")).toBe(true);
     const resumed = await launch(fixture, 100, session);
-    expect(toolRows(await resumed.text({ full: true }))).toEqual(["✓ read image.png"]);
+    expect(toolRows(await resumed.text({ full: true }))).toEqual([]);
+    expect(await resumed.text({ full: true })).toContain("image.png");
     // Force a width change to capture the resumed image's redraw.
     const resumedCapture = join(fixture.root, "resumed-image.cast");
     await resumed.startRecording(resumedCapture, { format: "cast" });

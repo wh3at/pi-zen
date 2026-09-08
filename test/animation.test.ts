@@ -3,7 +3,7 @@ import type { ExtensionAPI, ToolDefinition } from "@earendil-works/pi-coding-age
 import { visibleWidth } from "@earendil-works/pi-tui";
 import piZen from "../src/index.js";
 
-const names = ["read", "write", "edit", "bash", "grep", "find", "ls"];
+const names = ["write", "edit", "grep", "find", "ls"];
 const theme = { fg: (color: string, text: string) => `\x1b[${color === "dim" ? 90 : 37}m${text}\x1b[39m` } as never;
 const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, "");
 
@@ -56,7 +56,7 @@ it.each(names)("%sの明るい点が300msごとに0〜3個に増え、再描画�
 
 it.each([false, true])("完了・失敗・中断で点を止め、結果の再描画や復元ではタイマーを作らない: error=%s", (isError) => {
   const { tools } = setup();
-  const tool = tools.get("bash")!;
+  const tool = tools.get("edit")!;
   const ctx = context();
   tool.renderCall!(ctx.args, theme, ctx);
   vi.advanceTimersByTime(350);
@@ -64,7 +64,7 @@ it.each([false, true])("完了・失敗・中断で点を止め、結果の再�
   ctx.isError = isError;
   expect(tool.renderCall!(ctx.args, theme, ctx).render(40)).toEqual([]);
   const result = tool.renderResult!({ content: [], details: {} }, { expanded: false, isPartial: false }, theme, ctx);
-  expect(plain(result.render(40)[0]!)).toBe(`${isError ? "✗" : "✓"} bash sleep 3`);
+  expect(plain(result.render(40)[0]!)).toBe(`${isError ? "✗" : "✓"} edit source.txt`);
   vi.advanceTimersByTime(2000);
   expect(ctx.invalidate).toHaveBeenCalledTimes(1);
   tool.renderCall!(ctx.args, theme, { ...ctx, state: {}, lastComponent: undefined });
@@ -74,7 +74,7 @@ it.each([false, true])("完了・失敗・中断で点を止め、結果の再�
 it.each(["agent_end", "session_shutdown"])("%sで並行実行中の全タイマーを解除する", (event) => {
   const { tools, handlers } = setup();
   const contexts = [context(), context()];
-  for (const ctx of contexts) tools.get("bash")!.renderCall!(ctx.args, theme, ctx);
+  for (const ctx of contexts) tools.get("edit")!.renderCall!(ctx.args, theme, ctx);
   expect(vi.getTimerCount()).toBe(2);
   handlers.get(event)!();
   handlers.get(event)!();
@@ -85,7 +85,7 @@ it.each(["agent_end", "session_shutdown"])("%sで並行実行中の全タイマ�
 
 it("引数ストリーミング中はタイマーを作らず、実行開始で動かす", () => {
   const { tools } = setup();
-  const tool = tools.get("bash")!;
+  const tool = tools.get("edit")!;
   const ctx = context();
   ctx.executionStarted = false;
   tool.renderCall!(ctx.args, theme, ctx);

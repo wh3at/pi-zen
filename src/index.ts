@@ -1,10 +1,8 @@
 import {
-  createBashToolDefinition,
   createEditToolDefinition,
   createFindToolDefinition,
   createGrepToolDefinition,
   createLsToolDefinition,
-  createReadToolDefinition,
   createWriteToolDefinition,
   type ExtensionAPI,
   type ToolDefinition,
@@ -160,11 +158,11 @@ export default function piZen(pi: ExtensionAPI): void {
   pi.on("session_start", (_event, context) => {
     const initiallyActive = pi.getActiveTools();
     const configured = new Map(pi.getAllTools().map((tool) => [tool.name, tool]));
+    // Recreating bash/read would discard session shell and image settings.
+    // Keep their configured built-ins until Pi supports rendering-only overrides.
     const factories = {
-      read: createReadToolDefinition,
       write: createWriteToolDefinition,
       edit: createEditToolDefinition,
-      bash: createBashToolDefinition,
       grep: createGrepToolDefinition,
       find: createFindToolDefinition,
       ls: createLsToolDefinition,

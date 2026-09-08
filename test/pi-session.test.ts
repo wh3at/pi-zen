@@ -66,10 +66,10 @@ describe("pi-zenを読み込んだpiセッション", () => {
 
   it("保存済み引数と結果から幅内の要約だけを描画する", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "pi-zen-"));
-    const { session, extensionsResult } = await loadedSession(cwd, ["edit", "bash"]);
+    const { session, extensionsResult } = await loadedSession(cwd, ["edit", "write"]);
     const extension = extensionsResult.extensions.find((item) => item.resolvedPath === extensionPath)!;
     const edit = extension.tools.get("edit")!.definition;
-    const bash = extension.tools.get("bash")!.definition;
+    const write = extension.tools.get("write")!.definition;
     expect(edit.renderShell).toBe("self");
     expect(edit.promptSnippet).toBe(
       "Make precise file edits with exact text replacement, including multiple disjoint edits in one call",
@@ -85,28 +85,28 @@ describe("pi-zenを読み込んだpiセッション", () => {
       { content: [{ type: "text", text: "ok" }], details: { diff: "-1 old\n+1 new\n+2 extra" } },
       { expanded: true, isPartial: false }, theme, context({ path: "日本語/とても長い名前/source.txt" }),
     );
-    const bashError = bash.renderResult!(
-      { content: [{ type: "text", text: "large log\n\nCommand exited with code 7" }], details: {} },
-      { expanded: true, isPartial: false }, theme, context({ command: "printf a-very-long-command" }, true),
+    const writeError = write.renderResult!(
+      { content: [{ type: "text", text: "Permission denied\nextra detail" }], details: {} },
+      { expanded: true, isPartial: false }, theme, context({ path: "source.txt" }, true),
     );
     const resumedCall = edit.renderCall!(
       { path: "source.txt" }, theme, context({ path: "source.txt" }),
     );
-    const multilineCall = bash.renderCall!(
-      { command: "printf first\nprintf second" }, theme, context({ command: "printf first\nprintf second" }, false, true),
+    const multilineCall = write.renderCall!(
+      { path: "first\nsecond" }, theme, context({ path: "first\nsecond" }, false, true),
     );
 
     const plain = (lines: string[]) => lines.map((line) => line.replace(/\u001b\[[0-9;]*m/g, ""));
     expect(plain(editResult.render(30))).toEqual(["✓ edit 日本語/…urce.txt +2 -1"]);
-    expect(plain(bashError.render(24))).toEqual(["✗ bash printf a-very-lo…", "Command exited with cod…"]);
+    expect(plain(writeError.render(24))).toEqual(["✗ write source.txt", "Permission denied"]);
     expect(resumedCall.render(30)).toEqual([]);
-    expect(plain(multilineCall.render(40))).toEqual(["... bash printf first printf second"]);
+    expect(plain(multilineCall.render(40))).toEqual(["... write first second"]);
     session.dispose();
   });
 
   it("状態色は完了マークだけに適用し、実行中の点だけを明暗表示する", async () => {
     const cwd = await mkdtemp(join(tmpdir(), "pi-zen-"));
-    const { session, extensionsResult } = await loadedSession(cwd, ["bash", "edit"]);
+    const { session, extensionsResult } = await loadedSession(cwd, ["write", "edit"]);
     try {
       const extension = extensionsResult.extensions.find((item) => item.resolvedPath === extensionPath)!;
       const applied: [string, string][] = [];
@@ -114,9 +114,9 @@ describe("pi-zenを読み込んだpiセッション", () => {
         applied.push([color, text]);
         return text;
       } } as never;
-      for (const name of ["bash", "edit"]) {
+      for (const name of ["write", "edit"]) {
         const tool = extension.tools.get(name)!.definition;
-        const args = name === "bash" ? { command: "echo hello" } : { path: "source.txt" };
+        const args = { path: "source.txt" };
         const context = {
           args, state: {}, lastComponent: undefined, invalidate() {}, toolCallId: "call", cwd,
           executionStarted: true, argsComplete: true, isPartial: true, expanded: false, showImages: false, isError: false,
