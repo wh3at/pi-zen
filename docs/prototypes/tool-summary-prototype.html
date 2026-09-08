@@ -1,0 +1,197 @@
+<!doctype html>
+<!-- THROWAWAY: Three terminal tool-summary layouts, switched via ?variant=A|B|C.
+     Static visual model only, not a pi extension or proof of renderer feasibility.
+     Run: python3 -m http.server 8765 --bind 0.0.0.0 --directory docs/prototypes -->
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pi-zen — ツール要約の表示試作</title>
+<style>
+:root { color-scheme: dark; font-family: system-ui, sans-serif; background: #141519; color: #dddfe4; }
+* { box-sizing: border-box; }
+body { margin: 0 auto; max-width: 1200px; padding: 28px 20px 110px; }
+h1 { font-size: 21px; font-weight: 550; margin: 0 0 12px; }
+p { line-height: 1.7; font-size: 14px; color: #a8adb7; }
+.notice { border-left: 2px solid #ceac6c; padding-left: 12px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin: 24px 0 18px; font-size: 14px; }
+button, select { font: inherit; background: #24272f; color: #e0e3e9; border: 1px solid #4b515d; border-radius: 5px; padding: 7px 10px; cursor: pointer; }
+button:hover { background: #343945; }
+label { display: flex; align-items: center; gap: 8px; }
+.terminal { font: 14px/1.65 ui-monospace, SFMono-Regular, Consolas, monospace; width: calc(var(--cols) * 1ch + 32px); max-width: 100%; padding: 16px; background: #1b1d22; border: 1px solid #363a43; border-radius: 7px; }
+.context { color: #898e99; font-size: 12px; margin-bottom: 20px; }
+.prompt { color: #d5d8e0; padding-left: 10px; border-left: 2px solid #555c69; margin-bottom: 18px; }
+.answer { margin: 0 0 18px; }
+#calls { margin: 0 0 20px; }
+.call { margin: 0; }
+.line { display: flex; align-items: baseline; gap: 1ch; min-width: 0; height: 1.65em; white-space: nowrap; overflow: hidden; }
+.status { flex: 0 0 1ch; color: #8bb59d; }
+.status.running { color: #cfb476; }
+.status.error, .reason { color: #d79491; }
+.tool { color: #b2b7c1; flex: 0 0 auto; }
+.target { color: #cbd0d9; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats { flex: 0 0 auto; font-size: inherit; }
+.plus { color: #8bb59d; }
+.minus { color: #d79491; }
+.reason { display: block; padding-left: 2ch; height: 1.65em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.variant-A .target { flex: 0 1 auto; }
+.variant-B .tool { width: 5ch; }
+.variant-B .target { flex: 1; }
+.variant-C .target { flex: 0 1 auto; }
+.variant-C .tool { color: #777f8e; }
+.variant-C .status { order: 0; }
+.fixture-image { width: 210px; max-width: calc(100% - 2ch); margin: 7px 0 10px 2ch; background: #d7ddd6; color: #27392f; padding: 18px; border-radius: 2px; font-family: system-ui, sans-serif; }
+.fixture-image strong { display: block; font-size: 18px; }
+.fixture-image span { display: block; margin-top: 10px; font-size: 12px; }
+.input { border-top: 1px solid #454c5a; border-bottom: 1px solid #454c5a; padding: 8px 0; margin-top: 18px; color: #828a99; }
+.footer { font-size: 11px; color: #7b8290; margin-top: 6px; }
+#state { font: 12px/1.7 ui-monospace, monospace; white-space: pre-wrap; overflow-wrap: anywhere; color: #939ba9; }
+details { margin-top: 22px; }
+summary { cursor: pointer; font-size: 13px; color: #a8adb7; }
+.switcher { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; align-items: center; background: #e3e6ec; color: #1a2029; border-radius: 40px; padding: 8px 12px; box-shadow: 0 4px 26px #0008; white-space: nowrap; }
+.switcher button { background: transparent; color: #1a2029; border: 0; }
+#variantName { min-width: 140px; text-align: center; font-size: 14px; }
+@media print { .switcher, .controls { display: none; } }
+</style>
+</head>
+<body>
+<h1>ツール要約 — 表示試作</h1>
+<p class="notice">使い捨てのブラウザ上の見本です。pi本体の表示・幅計算を再現したものではありません。<br>差分数・失敗理由・画像は仮データ。editは保存済み差分から集計可能ですが、writeには旧内容が残らないため、数値を省く案を仮置きしています（未合意）。回答・入力欄などは配置の参考用で、変更案ではありません。</p>
+<div class="controls">
+<label>幅 <select id="width"><option value="40">40桁相当</option><option value="64">64桁相当</option><option value="100" selected>100桁相当</option></select></label>
+<label>場面 <select id="scenario"><option value="normal">通常・失敗・画像</option><option value="long">長い対象と理由</option><option value="sequence">連続実行</option><option value="parallel">同時実行（表示モデル）</option></select></label>
+<button id="advance">実行中 → 完了</button><button id="reset">実行中に戻す</button>
+</div>
+<p id="description"></p>
+<section class="terminal" style="--cols:100" aria-label="対話TUIの静的な見本">
+<div class="context">pi — 既存の会話の中で見比べる</div>
+<div class="prompt">設定を確認して修正し、テストを実行してください。</div>
+<div class="answer">関連するファイルを確認します。</div>
+<div id="calls"></div>
+<div class="answer" id="after"></div>
+<div class="input">› 次のメッセージを入力…</div>
+<div class="footer">~/Work/example · main</div>
+</section>
+<p>比較したい点：対象の見つけやすさ／数値の位置／40桁での省略／連続実行の密度。<br>共通の仮案：呼び出しごとに1行、空行・集約なし。長い対象は末尾を「…」で省略し、差分数を残します。失敗理由は別の1行、画像は例外として残します。</p>
+<details open><summary>試作の状態（表示案の一部ではありません）</summary><pre id="state"></pre></details>
+<nav class="switcher" aria-label="表示案の切り替え"><button id="prev" aria-label="前の案">←</button><span id="variantName"></span><button id="next" aria-label="次の案">→</button></nav>
+<script>
+const variants = ['A', 'B', 'C'];
+const names = { A: 'A · 文章型', B: 'B · 列整列型', C: 'C · 対象優先型' };
+const descriptions = {
+  A: 'A：状態 → ツール名 → 対象 → 差分数。情報を自然に続け、余分な列幅を取りません。',
+  B: 'B：ツール名の幅を揃え、対象を左・差分数を右に固定。連続した呼び出しを縦に追う案です。',
+  C: 'C：状態 → 対象 → 差分数 → ツール名。ファイル・コマンドを先に読む案です。'
+};
+const fixtures = {
+  normal: [
+    { tool: 'read', target: 'src/main.ts' },
+    { tool: 'edit', target: 'src/main.ts', stats: [12, 3] },
+    { tool: 'write', target: 'src/config.ts' },
+    { tool: 'bash', target: 'npm test', error: 'exit 1' },
+    { tool: 'read', target: 'assets/preview.png', image: true }
+  ],
+  long: [
+    { tool: 'read', target: 'src/features/account/settings/components/NotificationPreferences.tsx' },
+    { tool: 'edit', target: 'src/features/account/settings/components/NotificationPreferences.tsx', stats: [120, 38] },
+    { tool: 'bash', target: 'npm run test -- --reporter=verbose --project=integration', error: 'Permission denied: /workspace/generated/reports/integration/results.json' }
+  ],
+  sequence: [
+    { tool: 'ls', target: 'src/' },
+    { tool: 'find', target: '*.ts · src/' },
+    { tool: 'grep', target: 'loadConfig · src/' },
+    { tool: 'read', target: 'src/main.ts' },
+    { tool: 'read', target: 'src/config.ts' },
+    { tool: 'read', target: 'src/config.test.ts' },
+    { tool: 'edit', target: 'src/config.ts', stats: [12, 3] },
+    { tool: 'edit', target: 'src/config.ts', stats: [1, 1] },
+    { tool: 'write', target: 'src/config.test.ts' },
+    { tool: 'bash', target: 'npm test' }
+  ],
+  parallel: [
+    { tool: 'bash', target: 'npm run lint' },
+    { tool: 'bash', target: 'npm test', error: 'exit 1' },
+    { tool: 'read', target: 'README.md' }
+  ]
+};
+let variant = new URLSearchParams(location.search).get('variant');
+if (!variants.includes(variant)) variant = 'A';
+let complete = false;
+const byId = id => document.getElementById(id);
+function span(className, text) {
+  const element = document.createElement('span');
+  element.className = className;
+  element.textContent = text;
+  return element;
+}
+function render() {
+  const scenario = byId('scenario').value;
+  const rows = fixtures[scenario];
+  const calls = byId('calls');
+  calls.replaceChildren();
+  calls.className = 'variant-' + variant;
+  const states = [];
+  rows.forEach((row, index) => {
+    const running = !complete && (scenario === 'parallel' || index === rows.length - 1);
+    const failed = !running && !!row.error;
+    const status = running ? 'running' : failed ? 'error' : 'success';
+    const call = document.createElement('div');
+    call.className = 'call';
+    const line = document.createElement('div');
+    line.className = 'line';
+    const tool = span('tool', row.tool);
+    const target = span('target', row.target);
+    line.append(span('status ' + status, running ? '…' : failed ? '✗' : '✓'));
+    if (variant !== 'C') line.append(tool);
+    line.append(target);
+    if (row.stats && !running && !failed) {
+      const stats = span('stats', '');
+      stats.append(span('plus', '+' + row.stats[0]), document.createTextNode(' '), span('minus', '-' + row.stats[1]));
+      line.append(stats);
+    }
+    if (variant === 'C') line.append(tool);
+    call.append(line);
+    if (failed) call.append(span('reason', row.error));
+    if (row.image && !running) {
+      const image = document.createElement('div');
+      image.className = 'fixture-image';
+      image.setAttribute('role', 'img');
+      image.setAttribute('aria-label', '画像結果のダミー：緑色のカード');
+      const title = document.createElement('strong');
+      title.textContent = 'Preview';
+      image.append(title, span('', '画像結果のダミー'));
+      call.append(image);
+    }
+    calls.append(call);
+    states.push({ ...row, status });
+  });
+  document.querySelector('.terminal').style.setProperty('--cols', byId('width').value);
+  byId('variantName').textContent = names[variant];
+  byId('description').textContent = descriptions[variant];
+  byId('after').textContent = complete ? '確認が終わりました。（回答の配置見本）' : '';
+  byId('state').textContent = JSON.stringify({ variant, requestedColumns: Number(byId('width').value), scenario, complete, calls: states }, null, 2);
+}
+function switchVariant(delta) {
+  variant = variants[(variants.indexOf(variant) + delta + variants.length) % variants.length];
+  const url = new URL(location.href);
+  url.searchParams.set('variant', variant);
+  history.replaceState(null, '', url);
+  render();
+}
+byId('prev').onclick = () => switchVariant(-1);
+byId('next').onclick = () => switchVariant(1);
+byId('advance').onclick = () => { complete = true; render(); };
+byId('reset').onclick = () => { complete = false; render(); };
+byId('width').onchange = render;
+byId('scenario').onchange = () => { complete = false; render(); };
+document.addEventListener('keydown', event => {
+  if (event.target.closest('input, textarea, select, [contenteditable]')) return;
+  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+    event.preventDefault();
+    switchVariant(event.key === 'ArrowLeft' ? -1 : 1);
+  }
+});
+render();
+</script>
+</body>
+</html>
