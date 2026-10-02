@@ -1,6 +1,6 @@
 {
   "name": "@wh3at_dev/pi-zen",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Minimal tool summaries for pi",
   "publishConfig": {
     "access": "public"
