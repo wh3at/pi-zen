@@ -15,6 +15,12 @@ pi install npm:@wh3at_dev/pi-zen
 
 Requires pi 0.85.1 or later.
 
+## Codemode
+
+On pi 1.0.0, pi-zen always hides codemode scripts and output bodies, including after Ctrl+O. It shows the latest eight nested calls with their status and shortened arguments, plus brief failure reasons. Execution, model-facing results, and stored results remain unchanged. Codemode remains opt-in; pi-zen does not activate it.
+
+This uses the public `createCodemodeExtension` factory with a registration wrapper. Pi may report that pi-zen replaces the built-in codemode extension. Older hosts without this factory retain their existing behavior.
+
 ## Limitations
 
 ### Settings that are not preserved

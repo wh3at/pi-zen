@@ -13,6 +13,7 @@ import {
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { Container, truncateToWidth, visibleWidth, type Component } from "@earendil-works/pi-tui";
+import { registerCodemode } from "./codemode.js";
 type Args = Record<string, unknown>;
 
 function loadSettings(): { bash?: boolean; read?: boolean } {
@@ -174,6 +175,7 @@ function decorate(base: ToolDefinition, getTool: (cwd: string) => ToolDefinition
 
 export default function piZen(pi: ExtensionAPI): void {
   const settings = loadSettings();
+  registerCodemode(pi);
   const active = new Set<RunningDots>();
   const stopAnimations = () => {
     for (const dots of active) dots.stop();
